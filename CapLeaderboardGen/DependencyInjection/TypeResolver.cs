@@ -21,7 +21,7 @@ namespace CapLeaderboardGen.DependencyInjection
         {
             if (type == null) return null;
 
-            return serviceProvider.GetRequiredService(type);
+            return serviceProvider.GetService(type);
         }
     }
 }
