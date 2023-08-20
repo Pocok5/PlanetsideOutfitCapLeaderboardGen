@@ -37,6 +37,7 @@ class Program
 
         sc.AddCensusRestServices(maxRetryAttempts: 0);
         sc.AddScoped<OutfitInfoService>();
+        sc.AddScoped<WorldEventProcessorService>();
         sc.AddSingleton<CensusConfigContainer>();
         return sc;
     }

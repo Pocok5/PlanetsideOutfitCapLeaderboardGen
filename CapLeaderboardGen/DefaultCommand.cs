@@ -3,13 +3,6 @@ using CapLeaderboardGen.Services;
 using DbgCensus.Rest;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CapLeaderboardGen
 {
@@ -17,21 +10,23 @@ namespace CapLeaderboardGen
     {
         private readonly CensusConfigContainer censusConfigContainer;
         private readonly OutfitInfoService membersService;
+        private readonly WorldEventProcessorService worldEventProcessor;
 
-        public DefaultCommand(CensusConfigContainer censusConfigContainer, OutfitInfoService membersService)
+        public DefaultCommand(CensusConfigContainer censusConfigContainer, OutfitInfoService membersService, WorldEventProcessorService worldEventProcessor)
         {
             this.censusConfigContainer = censusConfigContainer;
             this.membersService = membersService;
+            this.worldEventProcessor = worldEventProcessor;
         }
 
         public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
         {
             var queryOptions = new CensusQueryOptions()
             {
-               Limit = 1000,
-               Namespace = "ps2:v2",
-               RootEndpoint = "https://census.daybreakgames.com/",
-               ServiceId = settings.ServiceId
+                Limit = 1000,
+                Namespace = "ps2:v2",
+                RootEndpoint = "https://census.daybreakgames.com/",
+                ServiceId = settings.ServiceId
             };
             censusConfigContainer.SetQueryOptions(queryOptions);
 
@@ -41,7 +36,30 @@ namespace CapLeaderboardGen
                     "Retrieving outfit members",
                     async _ => await membersService.RetrieveOutfitData(settings.OutfitTag)
                 );
-            
+
+            var progress = AnsiConsole.Progress();
+            progress.RefreshRate = TimeSpan.FromMilliseconds(50);
+            progress.Columns(
+                    new TaskDescriptionColumn(),
+                    new ProgressBarColumn()
+                        .RemainingStyle(new Style(Color.White))
+                        .CompletedStyle(new Style(Color.Gold3_1)),
+                    new PercentageColumn(),
+                    new RemainingTimeColumn(),
+                    new SpinnerColumn()
+                );
+            await progress.StartAsync(async (ctx) =>
+            {
+                var streamTask = ctx.AddTask("Downloading capture events");
+
+                await worldEventProcessor.ProcessEvents(
+                    settings.StartDate,
+                    settings.EndDate ?? DateTimeOffset.UtcNow,
+                    13,
+                    0,
+                    (args) => streamTask.Value = args.ProgressPercentage
+                );//TODO
+            });
 
             return 1;
         }
@@ -49,17 +67,16 @@ namespace CapLeaderboardGen
         public class Settings : CommandSettings
         {
             [CommandArgument(0, "<service_id>")]
-            public string ServiceId { get; init; }
+            public required string ServiceId { get; init; }
 
             [CommandArgument(1, "<outfit_tag>")]
-            public string OutfitTag { get; init; }
+            public required string OutfitTag { get; init; }
 
             [CommandArgument(2, "<start_date>")]
             public DateTimeOffset StartDate { get; init; }
 
             [CommandArgument(3, "[end_date]")]
             public DateTimeOffset? EndDate { get; init; }
-
         }
     }
 }

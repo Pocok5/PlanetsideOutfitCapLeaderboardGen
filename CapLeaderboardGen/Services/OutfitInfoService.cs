@@ -14,9 +14,9 @@ namespace CapLeaderboardGen.Services
         private readonly IQueryService queryService;
         private readonly ILogger<OutfitInfoService> logger;
 
-        private AsyncRetryPolicy retryPolicy;
+        private readonly AsyncRetryPolicy retryPolicy;
 
-        private OutfitInfo? outfitInfo;
+        public OutfitInfo? OutfitInfo { get; private set; }
         private Dictionary<long, string> characterNames = new();
 
 
@@ -52,7 +52,6 @@ namespace CapLeaderboardGen.Services
                 throw new InvalidOperationException("Failed to retrieve or parse outfit info");
             }
 
-            logger.LogInformation("Got here #2");
             logger.LogInformation("Retrieved data of outfit {Tag} {Name}. Retrieved names and IDs of {MembersArrayCount}/{Members} members.",
                 response.Alias,
                 response.Name,
@@ -80,7 +79,7 @@ namespace CapLeaderboardGen.Services
             }
             
             BuildCharacterNameCache(filtered);
-            outfitInfo = new OutfitInfo
+            OutfitInfo = new OutfitInfo
             {
                 Alias= filtered.Alias,
                 Name = filtered.Name,
@@ -95,6 +94,18 @@ namespace CapLeaderboardGen.Services
                 keySelector: (rec) => rec.CharacterId,
                 elementSelector: (rec) => rec.Name?.First ?? throw new InvalidOperationException("A nameless character sneaked past the check")
             );
+        }
+
+        public string? GetCharacterName(long characterId)
+        {
+            if (characterNames.TryGetValue(characterId, out var characterName))
+            {
+                return characterName;
+            }
+            else
+            {
+                return null;
+            }
         }
     }
 }

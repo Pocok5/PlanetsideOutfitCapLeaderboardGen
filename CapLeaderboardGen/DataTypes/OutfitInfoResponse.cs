@@ -10,10 +10,8 @@ namespace CapLeaderboardGen.DataTypes
     internal record OutfitInfo
     {
         public required string Alias { get; init; }
-        [JsonPropertyName("member_count")]
         public int MemberCount { get; init; }
         public required string Name { get; init; }
-        [JsonPropertyName("outfit_id")]
         public long OutfitId { get; init; }
     }
 
@@ -21,7 +19,6 @@ namespace CapLeaderboardGen.DataTypes
     {
         public record MemberRecord
         {
-            [JsonPropertyName("character_id")]
             public long CharacterId { get; init; }
             public CharacterName? Name { get; init; }
         }

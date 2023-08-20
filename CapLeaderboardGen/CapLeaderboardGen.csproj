@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BitFaster.Caching" Version="2.2.0" />
     <PackageReference Include="DbgCensus.Rest" Version="3.7.1" />
     <PackageReference Include="Polly" Version="7.2.4" />
     <PackageReference Include="Serilog" Version="3.0.1" />
