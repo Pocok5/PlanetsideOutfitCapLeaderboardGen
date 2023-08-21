@@ -28,6 +28,7 @@ namespace CapLeaderboardGen.Services
 
             retryPolicy = Policy
                 .Handle<HttpRequestException>()
+                .Or<TaskCanceledException>()
                 .WaitAndRetryAsync(6, (cnt) => TimeSpan.FromSeconds(Math.Pow(2, cnt)), (ex, retryTime) =>
                 {
                     logger.LogError(ex, "HTTP exception occured");

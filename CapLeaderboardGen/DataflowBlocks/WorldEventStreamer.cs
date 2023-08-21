@@ -16,7 +16,7 @@ using System.Threading.Tasks.Dataflow;
 
 namespace CapLeaderboardGen.DataflowBlocks
 {
-    internal class WorldEventStreamer : IReceivableSourceBlock<WorldFacilityEvent[]>
+    internal class WorldEventStreamer : BufferedSourceBlockBase<WorldFacilityEvent[]>
     {
         public record ProgressUpdateEventArgs
         {
@@ -25,8 +25,6 @@ namespace CapLeaderboardGen.DataflowBlocks
         }
 
         private readonly CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-        private readonly BufferBlock<WorldFacilityEvent[]> sourceBuffer = new BufferBlock<WorldFacilityEvent[]>();
-        
         private readonly int world;
         private readonly IQueryService queryService;
         private readonly CensusQueryOptions queryOptions;
@@ -49,6 +47,7 @@ namespace CapLeaderboardGen.DataflowBlocks
 
             retryPolicy = Policy
                             .Handle<HttpRequestException>()
+                            .Or<TaskCanceledException>()
                             .WaitAndRetryAsync(6, (cnt) => TimeSpan.FromSeconds(Math.Pow(2, cnt)), (ex, retryTime) =>
                             {
                                 logger?.LogError(ex, "HTTP exception occured");
@@ -97,9 +96,11 @@ namespace CapLeaderboardGen.DataflowBlocks
 
                 var deduped = DeduplicateEvents(response);
 
-                sourceBuffer.Post(deduped);
+                PostToBuffer(deduped);
 
             } while (returnedItemsCount == pageSize && !cancellationTokenSource.IsCancellationRequested);
+
+            Complete();
         }
 
         private WorldFacilityEvent[] DeduplicateEvents(WorldFacilityEvent[] response)
@@ -115,50 +116,5 @@ namespace CapLeaderboardGen.DataflowBlocks
             }
             return deduped;
         }
-
-        #region Sourceblock boilerplate
-        public Task Completion => sourceBuffer.Completion;
-
-        public void Complete()
-        {
-            cancellationTokenSource.Cancel();
-            sourceBuffer.Complete();
-        }
-
-        public WorldFacilityEvent[]? ConsumeMessage(DataflowMessageHeader messageHeader, ITargetBlock<WorldFacilityEvent[]> target, out bool messageConsumed)
-        {
-            return ((IReceivableSourceBlock<WorldFacilityEvent[]>)sourceBuffer).ConsumeMessage(messageHeader, target, out messageConsumed);
-        }
-
-        public void Fault(Exception exception)
-        {
-            ((IReceivableSourceBlock<WorldFacilityEvent[]>)sourceBuffer).Fault(exception);
-        }
-
-        public IDisposable LinkTo(ITargetBlock<WorldFacilityEvent[]> target, DataflowLinkOptions linkOptions)
-        {
-            return sourceBuffer.LinkTo(target, linkOptions);
-        }
-
-        public void ReleaseReservation(DataflowMessageHeader messageHeader, ITargetBlock<WorldFacilityEvent[]> target)
-        {
-            ((IReceivableSourceBlock<WorldFacilityEvent[]>)sourceBuffer).ReleaseReservation(messageHeader, target);
-        }
-
-        public bool ReserveMessage(DataflowMessageHeader messageHeader, ITargetBlock<WorldFacilityEvent[]> target)
-        {
-            return ((IReceivableSourceBlock<WorldFacilityEvent[]>)sourceBuffer).ReserveMessage(messageHeader, target);
-        }
-
-        public bool TryReceive(Predicate<WorldFacilityEvent[]>? filter, [MaybeNullWhen(false)] out WorldFacilityEvent[] item)
-        {
-            return sourceBuffer.TryReceive(filter, out item);
-        }
-
-        public bool TryReceiveAll([NotNullWhen(true)] out IList<WorldFacilityEvent[]>? items)
-        {
-            return sourceBuffer.TryReceiveAll(out items);
-        }
-        #endregion
     }
 }

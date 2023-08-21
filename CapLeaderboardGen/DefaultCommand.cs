@@ -56,9 +56,9 @@ namespace CapLeaderboardGen
                     settings.StartDate,
                     settings.EndDate ?? DateTimeOffset.UtcNow,
                     13,
-                    0,
+                    membersService.OutfitInfo?.OutfitId ?? throw new InvalidOperationException("Outfit info not initialized before trying to read it."),
                     (args) => streamTask.Value = args.ProgressPercentage
-                );//TODO
+                );
             });
 
             return 1;
