@@ -33,7 +33,7 @@ class Program
         var app = new CommandApp<DefaultCommand>(typeRegistrar);
         app.Configure(conf =>
         {
-            conf.PropagateExceptions();
+            //conf.PropagateExceptions();
         });
         return await app.RunAsync(args);
     }
@@ -45,7 +45,7 @@ class Program
         {
             conf.ClearProviders();
             var logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
+            .MinimumLevel.Warning()
             .MinimumLevel.Override("System.Net", Serilog.Events.LogEventLevel.Warning)
             .WriteTo.Spectre(outputTemplate: "[{Level:u4}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();

@@ -14,6 +14,12 @@ namespace CapLeaderboardGen.Services
 {
     internal class WorldEventProcessorService
     {
+        public record ProgressUpdateEventArgs
+        {
+            public double DownloadProgressPercentage { get; init; }
+            public bool PostProcessingInProgress { get; init; }
+        }
+
         private readonly DataflowBlockFactory blockFactory;
         private readonly OutfitInfoService outfitInfo;
         private readonly FacilityInfoService facilityInfoService;
@@ -27,12 +33,21 @@ namespace CapLeaderboardGen.Services
             this.logger = logger;
         }
 
-        public async Task<List<OutputRecord>> ProcessEvents(DateTimeOffset startDate, DateTimeOffset endDate, int worldId, long outfitId, Action<WorldEventStreamer.ProgressUpdateEventArgs> streamProgressDelegate)
+        public async Task<List<OutputRecord>> ProcessEvents(DateTimeOffset startDate, DateTimeOffset endDate, int worldId, long outfitId, Action<ProgressUpdateEventArgs> progressDelegate)
         {
+            var streamProgressEventHandler = (WorldEventStreamer.ProgressUpdateEventArgs args) =>
+            {
+                progressDelegate(new ProgressUpdateEventArgs
+                {
+                    DownloadProgressPercentage = args.ProgressPercentage,
+                    PostProcessingInProgress = false
+                });
+            };
+
             var finishedList = new List<OutputRecord>();
 
             var eventStreamerBlock = blockFactory.CreateWorldEventStreamerBlock(worldId, startDate, endDate);
-            eventStreamerBlock.OnStreamProgressUpdated += streamProgressDelegate;
+            eventStreamerBlock.OnStreamProgressUpdated += streamProgressEventHandler;
 
             var filterBlock = new TransformBlock<WorldFacilityEvent[], WorldFacilityEvent[]>(
                     (events) => events.Where(e => (e.OutfitId == outfitId) && (e.FactionOld != e.FactionNew)).ToArray()
@@ -54,9 +69,13 @@ namespace CapLeaderboardGen.Services
             outputTransformBlock.LinkTo(listAppendBlock, linkOptions);
 
             await eventStreamerBlock.StartStreaming();
+            await eventStreamerBlock.Completion;
+            
+            eventStreamerBlock.OnStreamProgressUpdated -= streamProgressEventHandler;
+            progressDelegate(new ProgressUpdateEventArgs { DownloadProgressPercentage = 100, PostProcessingInProgress = true });
 
             await listAppendBlock.Completion;
-            eventStreamerBlock.OnStreamProgressUpdated -= streamProgressDelegate;
+            
 
             return finishedList;
         }
