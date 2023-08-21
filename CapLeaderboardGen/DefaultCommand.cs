@@ -6,7 +6,6 @@ using Spectre.Console;
 using Spectre.Console.Cli;
 using System.ComponentModel;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace CapLeaderboardGen
 {
@@ -25,31 +24,10 @@ namespace CapLeaderboardGen
 
         public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
         {
-
-            TextWriter outputWriter;
-            if (settings.OutputPath is null)
+            if (settings.OutputPath?.Exists == true && !AnsiConsole.Confirm($"[red]The path '{settings.OutputPath}' already exists. Overwrite?[/]"))
             {
-                outputWriter = Console.Out;
+                return 1;
             }
-            else
-            {
-                if (settings.OutputPath.Exists)
-                {
-                    if (AnsiConsole.Confirm($"[red]The path '{settings.OutputPath}' already exists. Overwrite?[/]"))
-                    {
-                        outputWriter = new StreamWriter(settings.OutputPath.Create());
-                    }
-                    else
-                    {
-                        return 1;
-                    }
-                }
-                else
-                {
-                    outputWriter = new StreamWriter(settings.OutputPath.Create());
-                }
-            }
-
 
             var queryOptions = new CensusQueryOptions()
             {
@@ -72,13 +50,13 @@ namespace CapLeaderboardGen
             progress.Columns(
                     new TaskDescriptionColumn(),
                     new ProgressBarColumn()
-                        .RemainingStyle(new Style(Color.White))
-                        .CompletedStyle(new Style(Color.Gold3_1)),
+                        .RemainingStyle(new Style(Color.Silver))
+                        .CompletedStyle(new Style(Color.Blue)),
                     new PercentageColumn(),
                     new RemainingTimeColumn(),
                     new SpinnerColumn()
                 );
-            var results = await progress.StartAsync<List<OutputRecord>>(async (ctx) =>
+            var results = await progress.StartAsync(async (ctx) =>
             {
                 bool postProcessingBegan = false;
                 var streamTask = ctx.AddTask("Downloading capture events");
@@ -88,11 +66,13 @@ namespace CapLeaderboardGen
                     settings.EndDate ?? DateTimeOffset.UtcNow,
                     13,
                     membersService.OutfitInfo?.OutfitId ?? throw new InvalidOperationException("Outfit info not initialized before trying to read it."),
-                    (args) => {
+                    (args) =>
+                    {
                         streamTask.Value = args.DownloadProgressPercentage;
                         if (args.PostProcessingInProgress && !postProcessingBegan)
                         {
                             postProcessingBegan = true;
+                            streamTask.StopTask();
                             var postprocTask = ctx.AddTask("Processing capture events");
                             postprocTask.IsIndeterminate = true;
                         }
@@ -100,15 +80,59 @@ namespace CapLeaderboardGen
                 );
             });
 
-            
-
+            TextWriter outputWriter;
+            if (settings.OutputPath is not null)
+            {
+                outputWriter = new StreamWriter(settings.OutputPath.Create());
+            }
+            else
+            {
+                outputWriter = Console.Out;
+            }
             var outputJson = JsonSerializer.Serialize(results);
 
             outputWriter.Write(outputJson);
             outputWriter.Dispose();
 
+            if (settings.Table)
+            {
+                RenderTable(results);
+            }
+
             return 0;
         }
+
+        private void RenderTable(IEnumerable<OutputRecord> outputRecords)
+        {
+            var table = new Table();
+            table.AddColumns(
+                    new TableColumn("Name"),
+                    new TableColumn("Captures").RightAligned(),
+                    new TableColumn("CharacterId").Centered()
+                );
+
+            var query = outputRecords
+                    .GroupBy(x => new
+                    {
+                        x.CharacterId,
+                        x.CharacterName
+                    })
+                    .Select(x => new
+                    {
+                        x.Key.CharacterId,
+                        x.Key.CharacterName,
+                        Captures = x.Count()
+                    }).OrderByDescending(x=>x.Captures);
+
+            foreach (var elem in query)
+            {
+                table.AddRow(elem.CharacterName, elem.Captures.ToString(), elem.CharacterId.ToString());
+            }
+
+            AnsiConsole.Clear();
+            AnsiConsole.Write(table);
+        }
+
 
         public class Settings : CommandSettings
         {
@@ -131,11 +155,15 @@ namespace CapLeaderboardGen
             [Description("The JSON output path. You must specify this if you do not redirect standard output.")]
             public FileInfo? OutputPath { get; init; }
 
+            [CommandOption("-t|--table")]
+            [Description("Display a table of the aggregated base captures per person")]
+            public bool Table { get; init; }
+
             public override ValidationResult Validate()
             {
-                if (OutputPath == null && !Console.IsOutputRedirected)
+                if (OutputPath == null && !Console.IsOutputRedirected && !Table)
                 {
-                    return ValidationResult.Error("If you do not redirect the standard output, you must specify an output file with the -o|--output switch.");
+                    return ValidationResult.Error("If you do not redirect the standard output, you must specify an output file with the -o|--output switch or display a results table with -t|--table.");
                 }
 
                 return base.Validate();
