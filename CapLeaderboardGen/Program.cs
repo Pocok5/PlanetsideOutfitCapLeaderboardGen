@@ -45,7 +45,7 @@ class Program
         {
             conf.ClearProviders();
             var logger = new LoggerConfiguration()
-            .MinimumLevel.Warning()
+            .MinimumLevel.Information()
             .MinimumLevel.Override("System.Net", Serilog.Events.LogEventLevel.Warning)
             .WriteTo.Spectre(outputTemplate: "[{Level:u4}] {Message:lj}{NewLine}{Exception}")
             .CreateLogger();
